@@ -30,8 +30,10 @@ public class TFTPUDPClient {
         switch (command){
             case "write":
                 write();
+                break;
             case "read":
                 read();
+                break;
         }
         
     }
@@ -41,6 +43,7 @@ public class TFTPUDPClient {
     }
     
     public static void write() throws IOException{
+        System.out.println("TESTING...");
         DatagramSocket socket;
         DatagramPacket packet;
         
