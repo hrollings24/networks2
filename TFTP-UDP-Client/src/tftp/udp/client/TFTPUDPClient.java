@@ -5,6 +5,7 @@
  */
 package tftp.udp.client;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -29,7 +30,7 @@ public class TFTPUDPClient {
         String command = args[0];
         switch (command){
             case "write":
-                write();
+                write(args[1]);
                 break;
             case "read":
                 read();
@@ -42,31 +43,64 @@ public class TFTPUDPClient {
         throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
     
-    public static void write() throws IOException{
+    public static void write(String filepath) throws IOException{
         System.out.println("TESTING...");
         DatagramSocket socket;
         DatagramPacket packet;
         
+        DatagramPacket[] packets;
+        
+        FileInputStream file = null; 
+        try{
+            file = new FileInputStream("../" + filepath);
+            
+        
+        }
+        catch (IOException e){
+                System.err.println("file not found");
+                System.exit(1);
+        }
+        
+        
         int len = 512;
-        byte[] buf = new byte[len];
+        
+        
+        
+        int avaliableBytes = file.available();
+        int plength = (avaliableBytes/512) + 1;
+        packets = new DatagramPacket[plength];
+        InetAddress address = InetAddress.getByName("127.0.0.1");
+
+        int count = 0;
+        int counter = 0;
+        for(int i=0; i<avaliableBytes; i+=len){
+            byte[] buf = new byte[len];
+            int x = file.read(buf, 0, len);
+            packets[counter] = new DatagramPacket(buf, len, address, 9000);
+            counter++;
+            count += x;
+        }
+        
+        System.out.println(packets.length);
+        
         
         socket = new DatagramSocket(4000);
-        
-        InetAddress address = InetAddress.getByName("127.0.0.1");
-        
-        packet = new DatagramPacket(buf, len);
-        packet.setAddress(address);
-        packet.setPort(9000);
+        socket.setSoTimeout(2000);
 
-        socket.send(packet);
+        for(int k=0; k<packets.length; k++){
+            socket.send(packets[k]);
+            //ACK from server
+            
+            socket.receive(packets[k]);
+            
+            String received = new String(packets[k].getData());
+            System.out.println("Today's date: " + received.substring(0, packets[k].getLength()));
+            
+        }
 
-        //ACK from server
-        socket.receive(packet);
-
-        // display response
-        String received = new String(packet.getData());
-        System.out.println("Today's date: " + received.substring(0, packet.getLength()));
         socket.close();
+
+        
         
     }
     
