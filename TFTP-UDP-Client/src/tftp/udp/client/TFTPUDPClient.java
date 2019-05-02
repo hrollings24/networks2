@@ -6,6 +6,8 @@
 package tftp.udp.client;
 
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -39,20 +41,105 @@ public class TFTPUDPClient {
                 client.write(args[1]);
                 break;
             case "read":
-                read();
+                client.read(args[1]);
                 break;
         }
         
     }
 
-    private static void read() {
+    private void read(String filepath) throws IOException {
         //create read request
+        System.out.println("reading");
+        
+        DatagramPacket p = createReadRequest(filepath);
+        
+        DatagramSocket socket;
+        socket = new DatagramSocket(4000);
+        
+        socket.setSoTimeout(2000);
+        boolean check = true;
+        while (check){
+            socket.send(p);
+            try{
+                socket.receive(p);
+                check = false;
+            }
+            catch(SocketTimeoutException s){
+                System.out.println("error");
+                //no akt! try again
+            }
+        }
+        //akt recieved
         
         
         
         
         
-        throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+        
+        
+        
+        
+        
+        
+        
+        FileOutputStream f = null;
+        try {   
+            System.out.println(filepath);
+
+            f = new FileOutputStream("../"+filepath);
+        } catch (FileNotFoundException ex) {
+            System.out.println("Error creating file");
+            System.exit(1);
+        }
+        
+        
+        int counter=1;
+        outerloop:
+        while (true){
+            System.out.println("entered loop");
+            socket.setSoTimeout(2000);
+            boolean checktimeout = true;
+            
+            byte[] recvBuf = new byte[512]; 
+            DatagramPacket packet = new DatagramPacket(recvBuf, 512);
+            while (checktimeout){
+                try{
+                    socket.receive(packet);
+                    System.out.println("recieved " + counter);
+                    checktimeout = false;
+                } catch(SocketTimeoutException s){
+                    //end of transmission
+                    System.out.println("end");
+                    break outerloop;
+                }
+            }
+            
+
+            
+            f.write(recvBuf);
+
+            //send akt
+            String aktstring = String.valueOf(counter);
+            int len = aktstring.length();                                             // length of the byte array
+            byte[] buf = new byte[len];                                             // byte array that will store the data to be sent back to the client
+            System.arraycopy(aktstring.getBytes(), 0, buf, 0, len);
+
+            InetAddress addr = packet.getAddress();
+            int srcPort = packet.getPort();
+
+            packet.setData(buf);
+
+            packet.setAddress(addr);
+            packet.setPort(srcPort);
+
+            System.out.println("akt");
+            socket.send(packet);
+            counter++;
+        }
+        
+        
+        
+        
     }
     
     public void write(String filepath) throws IOException{
@@ -148,7 +235,7 @@ public class TFTPUDPClient {
     
     
     
-    public void createReadRequest(String fileName){
+    public DatagramPacket createReadRequest(String fileName){
         byte[] buf = new byte[fileName.length()+1];
         buf[0] = (byte) 'r';
         for (int i = 1; i < fileName.length()+1; i++) {
@@ -163,7 +250,7 @@ public class TFTPUDPClient {
         }
 
         DatagramPacket packet = new DatagramPacket(buf, fileName.length()+1, address, 9000);
-        
+        return packet;
     }
     
     public DatagramPacket createWriteRequest(String fileName){
