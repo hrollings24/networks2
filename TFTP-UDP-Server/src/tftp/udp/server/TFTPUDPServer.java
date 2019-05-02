@@ -5,6 +5,7 @@
  */
 package tftp.udp.server;
 
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -98,6 +99,41 @@ public class TFTPUDPServer extends Thread {
                     write(fileName);
                     
                 }
+                else if(mode=='r'){
+                    //get the file name
+                    //read request
+                    int i = 0;
+                    for(i=1; i<512; i++){
+                        if (recvBuf[i] == 0){
+                            break;
+                        }
+                        else{
+                            fileName += (char) recvBuf[i];
+                            
+                        }
+                    }
+                    System.out.println(fileName);
+                    
+                    //send akt
+                    String aktstring = String.valueOf(0);
+                    int len = aktstring.length();                                             // length of the byte array
+                    byte[] buf = new byte[len];                                             // byte array that will store the data to be sent back to the client
+                    System.arraycopy(aktstring.getBytes(), 0, buf, 0, len);
+
+                    InetAddress addr = packet.getAddress();
+                    int srcPort = packet.getPort();
+
+                    packet.setData(buf);
+
+                    packet.setAddress(addr);
+                    packet.setPort(srcPort);
+
+                    socket.send(packet);
+
+                    read(fileName, addr, srcPort);
+                    
+                    
+                }
             }
         } catch (IOException e) {
             System.err.println(e);
@@ -157,7 +193,52 @@ public class TFTPUDPServer extends Thread {
     }
     
     
-    public void read(String fileName){
+    public void read(String fileName, InetAddress addr, int src) throws IOException{
+        FileInputStream file = null; 
+        try{
+            file = new FileInputStream("../" + fileName);
+        }
+        catch (IOException e){
+                System.err.println("file not found");
+                System.exit(1);
+        }
+
+
+        DatagramPacket packets[];
+        int len = 512;
+
+        int avaliableBytes = file.available();
+        int plength = (avaliableBytes/512) + 1;
+        packets = new DatagramPacket[plength];
+        
+        int counterq = 0;
+        for(int e=0; e<avaliableBytes; e+=len){
+            byte[] buf = new byte[len];
+            int x = file.read(buf, 0, len);
+            packets[counterq] = new DatagramPacket(buf, len, addr, src);
+            counterq++;
+        }
+        
+        Boolean check;
+        for(int k=0; k<packets.length; k++){
+            socket.setSoTimeout(2000);
+            check = true;
+            
+            while (check){
+                System.out.println("Sending " + k);
+                socket.send(packets[k]);
+                try{
+                    socket.receive(packets[k]);
+                    check = false;
+                }
+                catch(SocketTimeoutException s){
+                    System.out.println("error");
+                }
+            }
+            
+        }
+        
+        
         
     }
     
