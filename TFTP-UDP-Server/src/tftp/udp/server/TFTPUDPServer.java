@@ -53,24 +53,24 @@ public class TFTPUDPServer extends Thread {
         
         
         int counter=0;
-        byte[] recvBuf = new byte[512];     // a byte array that will store the data received by the client
+        byte[] recvBuf = new byte[516];     // a byte array that will store the data received by the client
 
         try {
             // run forever
             while (true) {
 
-                DatagramPacket packet = new DatagramPacket(recvBuf, 512);
+                DatagramPacket packet = new DatagramPacket(recvBuf, 516);
                 socket.receive(packet);
                 
-                String fileName = null;
-                char mode = (char) recvBuf[0];
+                String fileName = "";
+                int mode = (int) recvBuf[1];
                 System.out.println(mode);
                 
-                if(mode=='w'){
+                if(mode==2){
                     //get the file name
                     //write request
                     int i = 0;
-                    for(i=1; i<512; i++){
+                    for(i=2; i<512; i++){
                         if (recvBuf[i] == 0){
                             break;
                         }
@@ -78,13 +78,10 @@ public class TFTPUDPServer extends Thread {
                             fileName += (char) recvBuf[i];
                         }
                     }
-                    System.out.println(fileName);
                     
                     //send akt
-                    String aktstring = String.valueOf(0);
-                    int len = aktstring.length();                                             // length of the byte array
-                    byte[] buf = new byte[len];                                             // byte array that will store the data to be sent back to the client
-                    System.arraycopy(aktstring.getBytes(), 0, buf, 0, len);
+                    byte[] buf = new byte[4];
+                    buf[1] = (byte) 4;
 
                     InetAddress addr = packet.getAddress();
                     int srcPort = packet.getPort();
@@ -99,11 +96,11 @@ public class TFTPUDPServer extends Thread {
                     write(fileName);
                     
                 }
-                else if(mode=='r'){
+                else if(mode==1){
                     //get the file name
                     //read request
                     int i = 0;
-                    for(i=1; i<512; i++){
+                    for(i=2; i<512; i++){
                         if (recvBuf[i] == 0){
                             break;
                         }
@@ -112,7 +109,6 @@ public class TFTPUDPServer extends Thread {
                             
                         }
                     }
-                    System.out.println(fileName);
                     
                     //send akt
                     String aktstring = String.valueOf(0);
@@ -142,41 +138,57 @@ public class TFTPUDPServer extends Thread {
     }
     
     
+    
+    
+    
+    
     public void write(String fileName) throws IOException{
         FileOutputStream f = null;
         try {   
-            f = new FileOutputStream("../"+fileName);
+            f = new FileOutputStream(fileName);
         } catch (FileNotFoundException ex) {
             System.out.println("Error creating file");
             System.exit(1);
         }
         
         
-        int counter=1;
+        int counter=0;
         outerloop:
         while (true){
             socket.setSoTimeout(2000);
             boolean checktimeout = true;
             
-            byte[] recvBuf = new byte[512]; 
-            DatagramPacket packet = new DatagramPacket(recvBuf, 512);
+            byte[] recvBuf = new byte[516]; 
+            DatagramPacket packet = new DatagramPacket(recvBuf, 516);
             while (checktimeout){
                 try{
                     socket.receive(packet);
-                    checktimeout = false;
+                    recvBuf = packet.getData();
+                    
+                    if (((int)recvBuf[1]) == 3){
+                        int val = ((recvBuf[2] & 0xff) << 8) | (recvBuf[3] & 0xff);
+                        if (val == counter){
+                            checktimeout = false;
+                        }
+                    }
                 } catch(SocketTimeoutException s){
                     //end of transmission
                     System.out.println("end");
                     break outerloop;
                 }
             }
-            f.write(recvBuf);
+            for(int i=4; i<516; i++){
+                f.write(recvBuf[i]);
+            }
             
             //send akt
             String aktstring = String.valueOf(counter);
-            int len = aktstring.length();                                             // length of the byte array
-            byte[] buf = new byte[len];                                             // byte array that will store the data to be sent back to the client
-            System.arraycopy(aktstring.getBytes(), 0, buf, 0, len);
+            int len = aktstring.length();                                           // length of the byte array
+            byte[] buf = new byte[4];                                             // byte array that will store the data to be sent back to the client
+            buf[1] = (byte) 4;
+            //block code
+            buf[3] = (byte) (counter & 0xFF);
+            buf[2] = (byte) ((counter >> 8) & 0xFF);
 
             InetAddress addr = packet.getAddress();
             int srcPort = packet.getPort();
@@ -196,7 +208,7 @@ public class TFTPUDPServer extends Thread {
     public void read(String fileName, InetAddress addr, int src) throws IOException{
         FileInputStream file = null; 
         try{
-            file = new FileInputStream("../" + fileName);
+            file = new FileInputStream(fileName);
         }
         catch (IOException e){
                 System.err.println("file not found");
