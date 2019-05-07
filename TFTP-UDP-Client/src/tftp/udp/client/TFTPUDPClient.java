@@ -30,55 +30,57 @@ public class TFTPUDPClient {
      */
     public static void main(String[] args) throws IOException {
         // parse arguments
-        // command
         // command = read | write 
         
-        TFTPUDPClient client = new TFTPUDPClient();
+        // Check that both required input arguments are passed.
+        if (args.length != 4) {
+            System.err.println("<mode> <file name> <address> <port>");
+            System.err.println("read | write");
+            System.exit(1);
+        }
         
+        TFTPUDPClient client = new TFTPUDPClient();
         String command = args[0];
         switch (command){
             case "write":
-                client.write(args[1]);
+                client.write(args[1], args[2], Integer.parseInt(args[3]));
                 break;
             case "read":
-                client.read(args[1]);
+                client.read(args[1], args[2], Integer.parseInt(args[3]));
                 break;
         }
         
     }
 
-    private void read(String filepath) throws IOException {
-        //create read request
-        System.out.println("reading");
+    private void read(String filepath, String address, int port) throws IOException {
+        //create read request 
         
-        DatagramPacket p = createReadRequest(filepath);
+        DatagramPacket p = createReadRequest(filepath, address, port);
         
         DatagramSocket socket;
         socket = new DatagramSocket(4000);
         
+        byte[] buf2 = new byte[4];
+
         socket.setSoTimeout(2000);
         boolean check = true;
         while (check){
             socket.send(p);
             try{
                 socket.receive(p);
-                check = false;
+                buf2 = p.getData();
+                if ((int) buf2[1] != 4){
+                    System.out.println("error");
+                }
+                else{
+                    check = false; 
+                }
             }
             catch(SocketTimeoutException s){
                 System.out.println("error");
                 //no akt! try again
             }
         }
-        //akt recieved
-        
-        
-        
-        
-        
-        
-        
-        
-        
         
         
         
@@ -86,7 +88,7 @@ public class TFTPUDPClient {
         try {   
             System.out.println(filepath);
 
-            f = new FileOutputStream("../"+filepath);
+            f = new FileOutputStream(filepath);
         } catch (FileNotFoundException ex) {
             System.out.println("Error creating file");
             System.exit(1);
@@ -142,21 +144,27 @@ public class TFTPUDPClient {
         
     }
     
-    public void write(String filepath) throws IOException{
-        System.out.println("TESTING...");
-        
-        DatagramPacket p = createWriteRequest("heylol.png");
+    public void write(String filepath, String addressed, int port) throws IOException{        
+        DatagramPacket p = createWriteRequest(filepath, addressed, port);
         
         DatagramSocket socket;
         socket = new DatagramSocket(4000);
         
+        byte[] buf2 = new byte[4];
+
         socket.setSoTimeout(2000);
         boolean check = true;
         while (check){
             socket.send(p);
             try{
                 socket.receive(p);
-                check = false;
+                buf2 = p.getData();
+                if ((int) buf2[1] != 4){
+                    System.out.println("error");
+                }
+                else{
+                    check = false; 
+                }
             }
             catch(SocketTimeoutException s){
                 System.out.println("error");
@@ -173,9 +181,10 @@ public class TFTPUDPClient {
         
         DatagramPacket[] packets;
         
+        System.out.println("fp: " + filepath);
         FileInputStream file = null; 
         try{
-            file = new FileInputStream("../" + filepath);
+            file = new FileInputStream(filepath);
         }
         catch (IOException e){
                 System.err.println("file not found");
@@ -187,22 +196,27 @@ public class TFTPUDPClient {
         int len = 512;
         
         int avaliableBytes = file.available();
+        System.out.println("avaliable: " + avaliableBytes);
         int plength = (avaliableBytes/512) + 1;
         packets = new DatagramPacket[plength];
-        InetAddress address = InetAddress.getByName("127.0.0.1");
+        InetAddress address = InetAddress.getByName(addressed);
 
         int count = 0;
         int counter = 0;
         for(int i=0; i<avaliableBytes; i+=len){
-            byte[] buf = new byte[len];
-            int x = file.read(buf, 0, len);
-            packets[counter] = new DatagramPacket(buf, len, address, 9000);
+            byte[] buf = new byte[516];
+            buf[0] = (byte) 0;
+            buf[1] = (byte) 3;
+            //block code
+            buf[3] = (byte) (counter & 0xFF);
+            buf[2] = (byte) ((counter >> 8) & 0xFF);
+            
+            int x = file.read(buf, 4, len);
+            packets[counter] = new DatagramPacket(buf, 516, address, port);
             counter++;
             count += x;
-        }
-        
-        System.out.println(packets.length);
-        
+            
+        }        
         
 
         for(int k=0; k<packets.length; k++){
@@ -213,7 +227,12 @@ public class TFTPUDPClient {
                 socket.send(packets[k]);
                 try{
                     socket.receive(packets[k]);
-                    check = false;
+                    byte[] b = new byte[4];
+                    b = packets[k].getData();
+                    int val = ((b[2] & 0xff) << 8) | (b[3] & 0xff);
+                    if(val == k){
+                        check = false;
+                    }
                 }
                 catch(SocketTimeoutException s){
                     System.out.println("error");
@@ -221,7 +240,6 @@ public class TFTPUDPClient {
             }
             
             String received = new String(packets[k].getData());
-            System.out.println("" + received.substring(0, packets[k].getLength()));
             
         }
 
@@ -235,39 +253,54 @@ public class TFTPUDPClient {
     
     
     
-    public DatagramPacket createReadRequest(String fileName){
-        byte[] buf = new byte[fileName.length()+1];
-        buf[0] = (byte) 'r';
-        for (int i = 1; i < fileName.length()+1; i++) {
-	    buf[i] = (byte) fileName.charAt(i-1);
+    public DatagramPacket createReadRequest(String fileName, String addressed, int port){
+        byte[] buf = new byte[fileName.length()+8];
+        buf[1] = (byte) 1;
+         for (int i = 2; i < fileName.length()+2; i++) {
+	    buf[i] = (byte) fileName.charAt(i-2);
 	}
+        buf[fileName.length()+2] = (byte) 0;
+        String mode = "octet";
+        for (int x=fileName.length()+3; x<fileName.length()+7; x++){
+            buf[x] = (byte) mode.charAt(x-(fileName.length()+3));
+        }
+        buf[fileName.length()+7] = (byte) 0;
+        
         InetAddress address = null;
         try {
-            address = InetAddress.getByName("127.0.0.1");
+            address = InetAddress.getByName(addressed);
         } catch (UnknownHostException ex) {
             System.out.println("Unknown host");
             System.exit(1);
         }
 
-        DatagramPacket packet = new DatagramPacket(buf, fileName.length()+1, address, 9000);
+        DatagramPacket packet = new DatagramPacket(buf, fileName.length()+8, address, port);
         return packet;
     }
     
-    public DatagramPacket createWriteRequest(String fileName){
-        byte[] buf = new byte[fileName.length()+1];
-        buf[0] = (byte) 'w';
-        for (int i = 1; i < fileName.length()+1; i++) {
-	    buf[i] = (byte) fileName.charAt(i-1);
+    public DatagramPacket createWriteRequest(String fileName, String addressed, int port){
+        byte[] buf = new byte[fileName.length()+8];
+        buf[1] = (byte) 2;
+        for (int i = 2; i < fileName.length()+2; i++) {
+            buf[i] = (byte) fileName.charAt(i-2);
 	}
+        buf[fileName.length()+2] = (byte) 0;
+        String mode = "octet";
+        for (int x=fileName.length()+3; x<fileName.length()+7; x++){
+            buf[x] = (byte) mode.charAt(x-(fileName.length()+3));
+        }
+        buf[fileName.length()+7] = (byte) 0;
+        
         InetAddress address = null;
         try {
-            address = InetAddress.getByName("127.0.0.1");
+            address = InetAddress.getByName(addressed);
         } catch (UnknownHostException ex) {
             System.out.println("Unknown host");
             System.exit(1);
         }
 
-        DatagramPacket packet = new DatagramPacket(buf, fileName.length()+1, address, 9000);
+        DatagramPacket packet = new DatagramPacket(buf, fileName.length()+8, address, port);
+                  
         return packet;
     }
 }
